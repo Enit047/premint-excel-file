@@ -2,7 +2,9 @@ import readline from 'readline'
 import cheerio from 'cheerio'
 import {Cluster} from 'puppeteer-cluster'
 import UserAgent from 'user-agents';
+
 import writeExcel from 'write-excel-file/node'
+import readExcel from 'read-excel-file/node'
 
 
 const userAgent = new UserAgent()
@@ -36,7 +38,7 @@ line.question(`Напишите ссылки на premint'ы через проб
     })
 
     const arrPremints = name.split(' ')
-    const newArrHtml = []
+    let newArrHtml = []
 
     // Error handler
     cluster.on('taskerror', (err, data) => {
@@ -66,15 +68,38 @@ line.question(`Напишите ссылки на premint'ы через проб
 
     // Write excel file 
     line.question('Скопируйте и вставьтe директорию папки, куда вы хотите сохранить файл: ', async (dirc) => {
+
+        let colArr
+        try {
+            let row = await readExcel(dirc + '/current_premints.xlsx')
+            row = row.splice(1, row.length).map(i => {
+                return i.map(elem => {
+                    if (elem == null) {
+                        return ''
+                    } else {
+                        return {type: String, value: elem}
+                    }
+                })
+            })
+            colArr = [...row, ...newArrHtml]
+        } catch (error) {
+            colArr = [...newArrHtml]
+        }
+
+        
         const dataExcel = [
             HEADER_ROW,
-            ...newArrHtml
+            ...colArr
         ]
     
-        await writeExcel(dataExcel, {
-            columns,
-            filePath: `${dirc}/current_premints.xlsx`
-        })
+        try {
+            writeExcel(dataExcel, {
+                columns,
+                filePath: `${dirc}/current_premints.xlsx`
+            })
+        } catch (error) {
+            console.error(`Ошибка: скорее всего у вас открыт тот файл, в который в добавляете изменения`)
+        }
     
         line.close()
     })
@@ -92,6 +117,7 @@ function pagesHandler(contentPage, url) {
         const name = $(elem).find('.text-uppercase').text().replace(/\B\s+|\s+\B/g, "")
         const value = $(elem).find('span').text().replace(/(\r\n|\n|\r)/gm, "").replace(/\B\s+|\B/g, "")
         const indexArr = HEADER_ROW.findIndex(i => i.value == objOfValues[name])
+
         objInfPage[indexArr] = {type: String, value}
     })
 
@@ -100,6 +126,17 @@ function pagesHandler(contentPage, url) {
     objInfPage[1] = {type: String, value: url}
     objInfPage[0] = {type: String, value: $('h1.heading.heading-1').text().replace(/(\r\n|\n|\r)/gm, "").replace(/\B\s+|\B/g, "")}
 
+    if (objInfPage[6]) {
+        const changesDisc = objInfPage[6].value.split(' ')
+        objInfPage[6].value = 'https://' + changesDisc.splice(0, 1)[0]
+    } 
+    if (objInfPage[7]) {
+        const changesTwitter = objInfPage[7].value.split(' ')
+        objInfPage[7].value = 'https://twitter.com/' + changesTwitter.splice(0, 1)[0]
+    }
+    if (objInfPage[9]) {
+        objInfPage[9].value = 'https://' + objInfPage[9].value
+    }
 
     return objInfPage
 }
@@ -125,6 +162,14 @@ const HEADER_ROW = [
     },
     {
         value: 'Дата рафла',
+        fontWeight: 'bold',
+        wrap: true,
+        height: 30,
+        align: 'center',
+        alignVertical: 'center'
+    },
+    {
+        value: 'Конец регистрации на рафл',
         fontWeight: 'bold',
         wrap: true,
         height: 30,
@@ -186,6 +231,7 @@ const columns = [
     { width: 35 },
     { width: 53 },
     { width: 35 },
+    { width: 35 },
     { width: 10 },
     { width: 20 },
     { width: 45 },
@@ -202,5 +248,6 @@ const objOfValues = {
     'Number of Winners': 'Кол-во победителей',
     'Verified Discord': 'Дискорд',
     'Verified Twitter': 'Твиттер',
-    'Raffle Time': 'Дата рафла'
+    'Raffle Time': 'Дата рафла',
+    'Registration Closes': 'Конец регистрации на рафл'
 }
